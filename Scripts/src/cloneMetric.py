@@ -54,7 +54,15 @@ def analyze_repo(repo_url, repo_name):
             ["git", "clone", "--depth", "1", repo_url, CLONE_DIR],
             check=True, capture_output=True, text=True, encoding='utf-8', errors='ignore'
         )
-        
+
+        print(f"  -> Tentando compilar {repo_name} com Maven (isso pode demorar)...")
+        subprocess.run(
+            ["mvn", "clean", "package", "-DskipTests"],
+            check=True, capture_output=True, text=True, encoding='utf-8', errors='ignore',
+            cwd=CLONE_DIR 
+        )
+        print(f"  -> Compilação bem-sucedida (ou ignorada).")
+
         java_source_dir = CLONE_DIR 
         
         print("  -> Buscando por um diretório de código-fonte padrão ('src/main/java')...")
