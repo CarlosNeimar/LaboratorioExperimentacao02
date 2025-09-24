@@ -1,0 +1,84 @@
+# 3_generate_reports.py
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import config
+
+def create_charts(df: pd.DataFrame):
+    print("  Gerando gráficos...")
+
+    sns.set_theme(style="whitegrid")
+
+    # 1. Correlação entre Estrelas e Linhas de Código (CK LOC)
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(data=df, x="stars_count", y="ck_loc", alpha=0.6)
+    plt.title('Estrelas no GitHub vs. Linhas de Código (LOC)')
+    plt.xlabel('Número de Estrelas')
+    plt.ylabel('Linhas de Código (medido pelo CK)')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.tight_layout()
+    plt.savefig(config.CHARTS_DIR / "stars_vs_loc.png")
+    plt.close()
+
+    # 2. Top 10 Repositórios por Linhas de Código (CK LOC)
+    top_10_loc = df.nlargest(10, 'ck_loc')
+    plt.figure(figsize=(12, 8))
+    sns.barplot(data=top_10_loc, y="full_name", x="ck_loc", palette="viridis")
+    plt.title('Top 10 Repositórios por Linhas de Código (LOC)')
+    plt.xlabel('Linhas de Código (medido pelo CK)')
+    plt.ylabel('Repositório')
+    plt.tight_layout()
+    plt.savefig(config.CHARTS_DIR / "top_10_by_loc.png")
+    plt.close()
+
+    # 3. Distribuição do Acoplamento (CBO)
+    plt.figure(figsize=(10, 6))
+    sns.histplot(df['ck_cbo'], bins=30, kde=True)
+    plt.title('Distribuição do Acoplamento Total entre Objetos (CBO)')
+    plt.xlabel('CBO Total por Repositório')
+    plt.ylabel('Frequência')
+    plt.xlim(0, df['ck_cbo'].quantile(0.95))
+    plt.tight_layout()
+    plt.savefig(config.CHARTS_DIR / "cbo_distribution.png")
+    plt.close()
+
+    print(f"  Gráficos salvos em: {config.CHARTS_DIR}")
+
+def main():
+    """Função principal para consolidar dados e gerar relatórios."""
+    print("\n--- INICIANDO SCRIPT 3: GERAÇÃO DE RELATÓRIOS ---")
+
+    repo_data_file = config.DATA_DIR / "repos.csv"
+    ck_metrics_file = config.DATA_DIR / "metricas.csv"
+
+    if not repo_data_file.exists() or not ck_metrics_file.exists():
+        print("ERRO: Arquivos de dados de entrada não encontrados.")
+        print("Por favor, execute os scripts '1_collect_data.py' e '2_analyze_repos.py' primeiro.")
+        return
+
+    df_repos = pd.read_csv(repo_data_file)
+    df_ck = pd.read_csv(ck_metrics_file)
+
+    print("  Consolidando dados do GitHub com as métricas do CK...")
+    df_final = pd.merge(df_repos, df_ck, on="repo_name", how="inner")
+
+    column_order = [
+        'full_name', 'repo_name', 'owner', 'stars_count', 'releases_count', 
+        'repo_age_years', 'ck_loc', 'java_files_count', 'ck_cbo', 'ck_dit', 
+        'ck_lcom', 'url'
+    ]
+    df_final = df_final[column_order]
+    output_excel_path = config.DATA_DIR / "final_report.xlsx"
+    df_final.to_excel(output_excel_path, index=False, engine='openpyxl')
+    
+    print(f"  Relatório final consolidado salvo em: {output_excel_path}")
+
+    create_charts(df_final)
+
+    print("--- SCRIPT 3: GERAÇÃO DE RELATÓRIOS FINALIZADO ---")
+
+
+if __name__ == "__main__":
+    main()
