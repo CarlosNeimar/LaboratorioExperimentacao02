@@ -16,6 +16,7 @@ def load_and_merge_data(metrics_path='./data/metricas.csv', repos_path='./data/r
     df_full = pd.merge(df_repos, df_metrics, on='repo_name', how='inner')
     df_full = df_full[df_full['arquivos_java'] > 0].copy()
 
+    # Normaliza as métricas de qualidade pelo número de arquivos
     df_full['cbo_avg'] = df_full['cbo_total'] / df_full['arquivos_java']
     df_full['dit_avg'] = df_full['dit_total'] / df_full['arquivos_java']
     df_full['lcom_avg'] = df_full['lcom_total'] / df_full['arquivos_java']
@@ -34,6 +35,7 @@ def load_and_merge_data(metrics_path='./data/metricas.csv', repos_path='./data/r
     return df_full
 
 def generate_descriptive_stats(df, process_cols, quality_cols):
+
     if df is None:
         return
     
@@ -44,10 +46,10 @@ def generate_descriptive_stats(df, process_cols, quality_cols):
     print(stats_view.to_markdown())
 
 def generate_correlation_heatmap(df, cols_for_corr):
+
     if df is None:
         return
         
-    # Usa nomes mais curtos para melhor visualização no gráfico
     short_names_map = {
         'Popularidade (estrelas)': 'Popularidade',
         'Maturidade (anos)': 'Maturidade',
@@ -71,85 +73,87 @@ def generate_correlation_heatmap(df, cols_for_corr):
     plt.show()
     print("\nHeatmap de correlação salvo como 'heatmap.png'")
 
-def plot_individual_research_question(df, x_var, y_var, rq_num, x_label, y_label, filename, x_scale=None, x_scale_params=None):
+def plot_combined_research_questions(df, rq_pairs, filename):
+
     if df is None:
         return
 
-    plt.figure(figsize=(8, 6))
-    ax = sns.scatterplot(data=df, x=x_var, y=y_var, alpha=0.6, s=50)
+    num_rows = len(rq_pairs)
+    fig, axes = plt.subplots(num_rows, 3, figsize=(20, 6 * num_rows), squeeze=False)
     
-    title = f'{rq_num}: {y_label} vs. {x_label}'
-    ax.set_title(title, fontsize=14)
-    ax.set_xlabel(x_label, fontsize=12)
-    ax.set_ylabel(y_label, fontsize=12)
-    
-    if x_scale:
-        ax.set_xscale(x_scale, **(x_scale_params or {}))
-    
-    if y_var == 'lcom_avg':
-        ax.set_yscale('symlog', linthresh=1)
+    quality_metrics = ['cbo_avg', 'dit_avg', 'lcom_avg']
+    y_labels = ['CBO Médio', 'DIT Médio', 'LCOM Médio']
 
-    plt.tight_layout()
+    for row_idx, (rq_title, params) in enumerate(rq_pairs.items()):
+        x_var = params['x_var']
+        x_scale = params['x_scale']
+        
+        for col_idx, y_var in enumerate(quality_metrics):
+            ax = axes[row_idx, col_idx]
+            sns.scatterplot(data=df, x=x_var, y=y_var, ax=ax, alpha=0.6, s=50)
+            
+            title = f'{rq_title}: {y_labels[col_idx]} vs. {params["x_label"]}'
+            ax.set_title(title, fontsize=12)
+            ax.set_xlabel(params['x_label'], fontsize=10)
+            ax.set_ylabel(y_labels[col_idx], fontsize=10)
+            
+            if x_scale:
+                ax.set_xscale(x_scale, **params.get('x_scale_params', {}))
+            
+            # Aplica escala logarítmica para LCOM devido à sua alta variância
+            if y_var == 'lcom_avg':
+                ax.set_yscale('symlog', linthresh=1)
+
+    plt.tight_layout(pad=3.0)
     plt.savefig(filename, dpi=300)
     plt.show()
-    print(f"Gráfico salvo como '{filename}'")
+    print(f"Gráficos combinados salvos como '{filename}'")
 
 
 if __name__ == '__main__':
     sns.set_theme(style="whitegrid", palette="viridis")
 
-    # Carrega e prepara os dados
     df_analysis = load_and_merge_data()
 
     if df_analysis is not None:
-        # Define as colunas de interesse
         process_cols = ['Popularidade (estrelas)', 'Maturidade (anos)', 'Atividade (releases)', 'Tamanho (LOC)', 'Tamanho (Comentários)']
         quality_cols = ['cbo_avg', 'dit_avg', 'lcom_avg']
-        quality_labels = ['CBO Médio', 'DIT Médio', 'LCOM Médio']
 
+        # 1. Gerar estatísticas descritivas
         generate_descriptive_stats(df_analysis, process_cols, quality_cols)
+
+        # 2. Gerar heatmap de correlação
         generate_correlation_heatmap(df_analysis, process_cols + quality_cols)
 
-        rq_configs = {
-            'RQ01': {
+        # 3. Gerar gráficos para as questões de pesquisa
+        
+        # Gráficos para QP01 e QP02
+        rq1_rq2_pairs = {
+            'QP01': {
                 'x_var': 'Popularidade (estrelas)', 
                 'x_label': 'Popularidade (Estrelas)', 
                 'x_scale': 'log'
             },
-            'RQ02': {
+            'QP02': {
                 'x_var': 'Maturidade (anos)', 
                 'x_label': 'Maturidade (Anos)', 
                 'x_scale': None
-            },
-            'RQ03': {
+            }
+        }
+        plot_combined_research_questions(df_analysis, rq1_rq2_pairs, 'rq1_rq2_plots.png')
+
+        # Gráficos para QP03 e QP04
+        rq3_rq4_pairs = {
+            'QP03': {
                 'x_var': 'Atividade (releases)', 
                 'x_label': 'Atividade (Releases)', 
                 'x_scale': 'symlog', 
                 'x_scale_params': {'linthresh': 1}
             },
-            'RQ04': {
+            'QP04': {
                 'x_var': 'Tamanho (LOC)', 
                 'x_label': 'Tamanho (Linhas de Código)', 
                 'x_scale': 'log'
             }
         }
-
-        for rq_num, params in rq_configs.items():
-            for i, y_var in enumerate(quality_cols):
-                y_label = quality_labels[i]
-                rq_short_num = rq_num[-2:]
-                metric_short_name = y_var.split('_')
-                
-                filename = f"rq{rq_short_num}_{metric_short_name}.png"
-                
-                plot_individual_research_question(
-                    df=df_analysis,
-                    x_var=params['x_var'],
-                    y_var=y_var,
-                    rq_num=rq_num,
-                    x_label=params['x_label'],
-                    y_label=y_label,
-                    filename=filename,
-                    x_scale=params.get('x_scale'),
-                    x_scale_params=params.get('x_scale_params')
-                )
+        plot_combined_research_questions(df_analysis, rq3_rq4_pairs, 'rq3_rq4_plots.png')
